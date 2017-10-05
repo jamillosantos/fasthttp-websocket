@@ -1,11 +1,11 @@
 package websocket
 
 import (
-	"github.com/valyala/fasthttp"
+	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
-	"bytes"
+	"github.com/valyala/fasthttp"
 )
 
 var (
@@ -21,6 +21,7 @@ var (
 	strSecWebSocketExtensions = []byte("Sec-WebSocket-Extensions")
 )
 
+// HandshakeError represents an handshake error while upgrading a connection.
 type HandshakeError struct {
 	message string
 }
@@ -29,15 +30,17 @@ func (e HandshakeError) Error() string {
 	return e.message
 }
 
+// Upgrader implements build the HTTP Package for upgrading the connection from
+// regular HTTP Request to a Websocket request.
 type Upgrader struct {
 	Error func(ctx *fasthttp.RequestCtx, reason error)
 }
 
-func (this *Upgrader) reportError(ctx *fasthttp.RequestCtx, status int, reason string) error {
+func (u *Upgrader) reportError(ctx *fasthttp.RequestCtx, status int, reason string) error {
 	err := HandshakeError{reason}
 	ctx.Response.SetStatusCode(status)
-	if this.Error != nil {
-		this.Error(ctx, err)
+	if u.Error != nil {
+		u.Error(ctx, err)
 	} else {
 		ctx.Response.Header.Set("Content-Type", "text/plain; charset=utf-8")
 		fmt.Fprint(ctx, reason)
@@ -45,31 +48,32 @@ func (this *Upgrader) reportError(ctx *fasthttp.RequestCtx, status int, reason s
 	return err
 }
 
-func (this *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handler fasthttp.HijackHandler) error {
+// Upgrade upgrades the request to the websocket protocol.
+func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handler fasthttp.HijackHandler) error {
 	if !ctx.IsGet() {
-		return this.reportError(ctx, fasthttp.StatusMethodNotAllowed, "Method not allowed")
+		return u.reportError(ctx, fasthttp.StatusMethodNotAllowed, "Method not allowed")
 	}
 
 	if !bytes.Equal(ctx.Request.Header.PeekBytes(strConnection), strUpgrade) {
-		return this.reportError(ctx, fasthttp.StatusBadRequest, "Invalid connection type")
+		return u.reportError(ctx, fasthttp.StatusBadRequest, "Invalid connection type")
 	}
 
 	upgradeTo := ctx.Request.Header.PeekBytes(strUpgrade)
 	if !bytes.Equal(upgradeTo, strwebsocket) {
-		return this.reportError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("This connection cannot be upgraded to '%s'", upgradeTo))
+		return u.reportError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("This connection cannot be upgraded to '%s'", upgradeTo))
 	}
 
 	key := ctx.Request.Header.PeekBytes(strSecWebSocketKey)
 	if key == nil {
-		return this.reportError(ctx, fasthttp.StatusBadRequest, "The key is missing.")
+		return u.reportError(ctx, fasthttp.StatusBadRequest, "The key is missing.")
 	}
 
 	version := ctx.Request.Header.PeekBytes(strSecWebSocketVersion)
 	if version == nil {
-		return this.reportError(ctx, fasthttp.StatusBadRequest, "No version provided.")
+		return u.reportError(ctx, fasthttp.StatusBadRequest, "No version provided.")
 	}
 	if !bytes.Equal(version, strSecWebSocketVersion13) {
-		return this.reportError(ctx, fasthttp.StatusBadRequest, "The version is not supported.")
+		return u.reportError(ctx, fasthttp.StatusBadRequest, "The version is not supported.")
 	}
 
 	// TODO: Check origin

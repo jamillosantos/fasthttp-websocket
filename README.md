@@ -3,9 +3,10 @@
 [![Coverage Status](https://coveralls.io/repos/github/jamillosantos/fasthttp-websocket/badge.svg?branch=master)](https://coveralls.io/github/jamillosantos/fasthttp-websocket?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jamillosantos/migration)](https://goreportcard.com/report/github.com/jamillosantos/fasthttp-websocket)
 
-**This library is under heavy development**
+**This library is under development**
 
 # fasthttp-websocket
+
 A WebSocket implementation on top of the fasthttp.
 
 # Motivation
@@ -21,7 +22,7 @@ for the fasthttp at the master branch. How strange is that!?
 
 Hence, I decided to come up with a websocket protocol implementation for
 the fasthttp. Meanwhile, I will be using interfaces for pretty much anything to
-try to reduce the binding between the fasthttp and this websocket
+try to avoid any heavy bind between the fasthttp and this websocket 
 implementation.
 
 # Testing

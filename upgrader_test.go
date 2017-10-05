@@ -4,10 +4,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"testing"
+	"fmt"
 	"github.com/valyala/fasthttp"
 	"net"
-	"fmt"
+	"testing"
 )
 
 func TestFasthttpWebsocket(t *testing.T) {
