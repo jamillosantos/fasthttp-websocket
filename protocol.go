@@ -5,6 +5,8 @@ import (
 	"compress/flate"
 	"encoding/binary"
 	"sync"
+	"errors"
+	"math"
 )
 
 const (
@@ -37,8 +39,10 @@ const (
 )
 
 const (
-	payloadLen16bits = 126
-	payloadLen64bits = 127
+	payloadLen16bits       = byte(126)
+	payloadLen64bits       = byte(127)
+	payloadLen16bitsUint64 = uint64(126)
+	payloadLen64bitsUint64 = uint64(127)
 )
 
 const (
@@ -56,9 +60,22 @@ const (
 	OPCodePongFrame byte = 10
 )
 
+var (
+	errorUnexpectedEndOfPacket = errors.New("Unexpected end of packet")
+	errorWrongMaskKey          = errors.New("Wrong mask key")
+)
+
+// IsUnexpectedEndOfPacket checks if the given error is of type unexpected end of packet
+func IsUnexpectedEndOfPacket(err error) bool {
+	return err == errorUnexpectedEndOfPacket
+}
+
 // DecodePacket splits all the information from the raw packet and return it.
 func DecodePacket(buff []byte) (fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloadLen uint64, maskingKey []byte, payload []byte, err error) {
-	// TODO IMPORTANT! Check for acessing out of bound indexes.
+	buffLen := uint64(len(buff))
+	if buffLen < 3 {
+		return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+	}
 
 	// 1st byte
 	fin = ((buff[positionFinRsvsOpCode] & maskFin) == maskFin)
@@ -73,24 +90,41 @@ func DecodePacket(buff []byte) (fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcod
 
 	// Check if the payload length is extended
 	startAt := positionMaskPayloadLenExtended
-	if payloadLen == payloadLen16bits {
+	if payloadLen == payloadLen16bitsUint64 {
 		startAt += 2
+		if buffLen < uint64(positionMaskPayloadLenExtended16bitsEnding) {
+			return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+		}
 		payloadLen = uint64(binary.BigEndian.Uint16(buff[positionMaskPayloadLenExtended:positionMaskPayloadLenExtended16bitsEnding]))
-	} else if payloadLen == payloadLen64bits {
+	} else if payloadLen == payloadLen64bitsUint64 {
 		startAt += 8
+		if buffLen < uint64(startAt) {
+			return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+		}
 		payloadLen = binary.BigEndian.Uint64(buff[positionMaskPayloadLenExtended:positionMaskPayloadLenExtended64bitsEnding])
+	} else if (payloadLen + uint64(positionMaskPayloadLen)) > buffLen {
+		return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
 	}
 
 	// Check the masking key
 	if masked {
-		maskingKey = buff[2:6]
 		startAt += 4
+		if buffLen < uint64(startAt) {
+			return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+		}
+		maskingKey = buff[(startAt - 4):startAt]
+	}
+	if buffLen < uint64(startAt)+payloadLen {
+		return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
 	}
 	payload = buff[startAt:(uint64(startAt) + payloadLen)]
 	return
 }
 
 // Unmask unmasks a masked payload.
+//
+// There is no Mask method. Since the masking procedure is a bitwise not,
+// applying Unmask will toggle the un/masking.
 func Unmask(buff, mask []byte) {
 	l := uint64(len(buff))
 	masklen := uint64(len(mask))
@@ -98,6 +132,62 @@ func Unmask(buff, mask []byte) {
 	for i := uint64(0); i < l; i++ {
 		buff[i] = buff[i] ^ mask[i%masklen]
 	}
+}
+
+func EncodePacket(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloadLen uint64, maskingKey []byte, payload []byte) ([]byte, error) {
+	if (maskingKey != nil) && (len(maskingKey) != 4) {
+		return nil, errorWrongMaskKey
+	}
+
+	l := 2 // Default header
+	if payloadLen > math.MaxUint16 {
+		l += 8 // + 64-bit length
+	} else if payloadLen > uint64(payloadLen16bits) {
+		l += 2 // + 16-bit length
+	}
+	if maskingKey != nil {
+		l += 4 // + masking key
+	}
+
+	dst := make([]byte, l)
+	if fin {
+		dst[positionFinRsvsOpCode] = dst[positionFinRsvsOpCode] | maskFin
+	}
+	if rsv1 {
+		dst[positionFinRsvsOpCode] = dst[positionFinRsvsOpCode] | maskRsv1
+	}
+	if rsv2 {
+		dst[positionFinRsvsOpCode] = dst[positionFinRsvsOpCode] | maskRsv2
+	}
+	if rsv3 {
+		dst[positionFinRsvsOpCode] = dst[positionFinRsvsOpCode] | maskRsv3
+	}
+	dst[positionFinRsvsOpCode] = dst[positionFinRsvsOpCode] | (opcode & maskOpCode)
+
+	maskingValue := byte(0)
+	if maskingKey != nil {
+		maskingValue = maskMask
+	}
+	startAt := positionMaskPayloadLenExtended
+	if payloadLen < uint64(payloadLen16bits) {
+		dst[positionMaskPayloadLen] = maskingValue | (maskPayloadLen & byte(payloadLen))
+	} else if payloadLen < math.MaxUint16 {
+		dst[positionMaskPayloadLen] = maskingValue | payloadLen16bits
+		binary.BigEndian.PutUint16(dst[positionMaskPayloadLenExtended:], uint16(payloadLen))
+		startAt += 2
+	} else {
+		dst[positionMaskPayloadLen] = maskingValue | payloadLen64bits
+		binary.BigEndian.PutUint64(dst[positionMaskPayloadLenExtended:], payloadLen)
+		startAt += 8
+	}
+
+	if maskingKey != nil {
+		copy(dst[startAt:], maskingKey)
+		startAt += 4
+	}
+
+	dst = append(dst, payload...)
+	return dst, nil
 }
 
 const deflateBufferDefaultSize = 1024
@@ -127,4 +217,24 @@ func Deflate(dst, src []byte) ([]byte, error) {
 		return dst, err
 	}
 	return nil, err
+}
+
+// Flate compress the given src into the dst buffer
+// It returns the amount of bytes written or an error.
+func Flate(dst, src []byte) ([]byte, int, error) {
+	b := bytes.NewBuffer(dst)
+	writer, err := flate.NewWriter(b, flate.BestCompression)
+	if err != nil {
+		return nil, 0, err
+	}
+	_, err = writer.Write(src)
+	if err != nil {
+		return nil, 0, err
+	}
+	err = writer.Flush()
+	if err != nil {
+		return nil, 0, err
+	}
+	l := b.Len() - 4
+	return b.Bytes()[:l], l, nil
 }
