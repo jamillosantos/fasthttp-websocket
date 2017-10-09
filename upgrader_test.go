@@ -6,7 +6,6 @@ import (
 
 	"fmt"
 	"github.com/valyala/fasthttp"
-	"net"
 	"testing"
 )
 
@@ -26,7 +25,7 @@ func buildValidCtx() *fasthttp.RequestCtx {
 	return ctx
 }
 
-func noopHandler(conn net.Conn) {}
+func noopHandler(conn *Conn) {}
 
 var _ = Describe("Upgrader", func() {
 	It("should check generating accepts for keys", func() {

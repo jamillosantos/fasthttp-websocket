@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/valyala/fasthttp"
+	"net"
+	"sync"
 )
 
 var (
@@ -30,10 +32,27 @@ func (e HandshakeError) Error() string {
 	return e.message
 }
 
+// ConnHandler represents the handler that the Upgrader will trigger after
+// successfully upgrading the connection.
+type ConnHandler func(conn *Conn)
+
 // Upgrader implements build the HTTP Package for upgrading the connection from
 // regular HTTP Request to a Websocket request.
 type Upgrader struct {
 	Error func(ctx *fasthttp.RequestCtx, reason error)
+
+	conns sync.Pool
+}
+
+// NewUpgrader returns a new instance of an websocket.Upgrader
+func NewUpgrader() *Upgrader {
+	return &Upgrader{
+		conns: sync.Pool{
+			New: func() interface{} {
+				return &Conn{}
+			},
+		},
+	}
 }
 
 func (u *Upgrader) reportError(ctx *fasthttp.RequestCtx, status int, reason string) error {
@@ -48,8 +67,10 @@ func (u *Upgrader) reportError(ctx *fasthttp.RequestCtx, status int, reason stri
 	return err
 }
 
-// Upgrade upgrades the request to the websocket protocol.
-func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handler fasthttp.HijackHandler) error {
+// Upgrade upgrades the request to the websocket protocol
+//
+// TODO To document
+func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handler ConnHandler) error {
 	if !ctx.IsGet() {
 		return u.reportError(ctx, fasthttp.StatusMethodNotAllowed, "Method not allowed")
 	}
@@ -82,10 +103,15 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handler fasthttp.HijackHand
 	ctx.Response.Header.AddBytesKV(strUpgrade, strwebsocket)
 	ctx.Response.Header.AddBytesKV(strConnection, strUpgrade)
 	ctx.Response.Header.AddBytesKV(strSecWebSocketAccept, generateAcceptFromKey(key))
+
 	// TODO: If compressions requested
 	ctx.Response.Header.AddBytesK(strSecWebSocketExtensions, "permessage-deflate; server_no_context_takeover; client_no_context_takeover")
 
-	ctx.Hijack(handler)
+	ctx.Hijack(func(c net.Conn) {
+		conn := u.conns.Get().(*Conn)
+		conn.conn = c
+		handler(conn)
+	})
 	return nil
 }
 
