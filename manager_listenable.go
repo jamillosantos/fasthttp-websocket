@@ -1,9 +1,9 @@
 package websocket
 
 import (
+	"github.com/pkg/errors"
 	"sync"
 	"time"
-	"github.com/pkg/errors"
 )
 
 // ListenableManager is a websocket.Manager that implements a set of handlers
