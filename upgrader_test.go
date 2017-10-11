@@ -36,7 +36,7 @@ var _ = Describe("Upgrader", func() {
 	It("should upgrade the connection", func() {
 		ctx := buildValidCtx()
 		upgrader := &Upgrader{}
-		Expect(upgrader.Upgrade(ctx, noopHandler)).To(BeNil())
+		Expect(upgrader.Upgrade(ctx)).To(BeNil())
 	})
 
 	It("should fail upgrading due to wrong method", func() {
@@ -44,7 +44,7 @@ var _ = Describe("Upgrader", func() {
 		ctx.Request.Header.SetMethod("POST")
 
 		upgrader := &Upgrader{}
-		err := upgrader.Upgrade(ctx, nil)
+		err := upgrader.Upgrade(ctx)
 		Expect(fmt.Sprintf("%s", err)).To(Equal("Method not allowed"))
 	})
 
@@ -53,7 +53,7 @@ var _ = Describe("Upgrader", func() {
 		ctx.Request.Header.Set("Connection", "another type")
 
 		upgrader := &Upgrader{}
-		err := upgrader.Upgrade(ctx, nil)
+		err := upgrader.Upgrade(ctx)
 		Expect(fmt.Sprintf("%s", err)).To(Equal("Invalid connection type"))
 	})
 
@@ -62,7 +62,7 @@ var _ = Describe("Upgrader", func() {
 		ctx.Request.Header.Del("Connection")
 
 		upgrader := &Upgrader{}
-		err := upgrader.Upgrade(ctx, nil)
+		err := upgrader.Upgrade(ctx)
 		Expect(fmt.Sprintf("%s", err)).To(Equal("Invalid connection type"))
 	})
 
@@ -71,7 +71,7 @@ var _ = Describe("Upgrader", func() {
 		ctx.Request.Header.Set("Upgrade", "invalid")
 
 		upgrader := &Upgrader{}
-		err := upgrader.Upgrade(ctx, nil)
+		err := upgrader.Upgrade(ctx)
 		Expect(fmt.Sprintf("%s", err)).To(Equal("This connection cannot be upgraded to 'invalid'"))
 	})
 
@@ -80,7 +80,7 @@ var _ = Describe("Upgrader", func() {
 		ctx.Request.Header.Del("Sec-WebSocket-Key")
 
 		upgrader := &Upgrader{}
-		err := upgrader.Upgrade(ctx, nil)
+		err := upgrader.Upgrade(ctx)
 		Expect(fmt.Sprintf("%s", err)).To(Equal("The key is missing."))
 	})
 
@@ -89,7 +89,7 @@ var _ = Describe("Upgrader", func() {
 		ctx.Request.Header.Del("Sec-WebSocket-Version")
 
 		upgrader := &Upgrader{}
-		err := upgrader.Upgrade(ctx, nil)
+		err := upgrader.Upgrade(ctx)
 		Expect(fmt.Sprintf("%s", err)).To(Equal("No version provided."))
 	})
 
@@ -98,7 +98,7 @@ var _ = Describe("Upgrader", func() {
 		ctx.Request.Header.Set("Sec-WebSocket-Version", "12")
 
 		upgrader := &Upgrader{}
-		err := upgrader.Upgrade(ctx, nil)
+		err := upgrader.Upgrade(ctx)
 		Expect(fmt.Sprintf("%s", err)).To(Equal("The version is not supported."))
 	})
 

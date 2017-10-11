@@ -33,12 +33,6 @@ release:
 	@read -p "Press enter to confirm and push to origin ..." && git push origin v$(V)
 
 
-define external_deps
-	@echo '-- $(1)';  go list -f '{{join .Deps "\n"}}' $(1) | grep -v github.com/$(REPO_OWNER)/migrate | xargs go list -f '{{if not .Standard}}{{.ImportPath}}{{end}}'
-
-endef
-
-
 .PHONY: build-cli clean test-short test test-with-flags deps html-coverage \
         list-external-deps release
 
