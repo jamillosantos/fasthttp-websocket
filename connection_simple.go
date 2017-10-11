@@ -1,24 +1,25 @@
 package websocket
 
 import (
+	"log"
 	"net"
 	"time"
-	"log"
 )
 
-// BaseConnection represents a connection with a client
+// SimpleConnection represents a connection with a client
 type SimpleConnection struct {
 	BaseConnection
 }
 
-// NewConn initialized and return a new websocket.BaseConnection instance
+// NewSimpleConn initialized and return a new websocket.BaseConnection instance
 func NewSimpleConn(conn net.Conn) *SimpleConnection {
 	return &SimpleConnection{
 		BaseConnection: *NewConn(conn),
 	}
 }
 
-func (c *BaseConnection) ReadMessage() (MessageType, []byte, error) {
+// ReadMessage implements the websocket.Connection.ReadMessage method
+func (c *SimpleConnection) ReadMessage() (MessageType, []byte, error) {
 	opc, payload, err := c.ReadPacket()
 	opcode := MessageType(opc)
 	if err != nil {
@@ -40,16 +41,19 @@ func (c *BaseConnection) ReadMessage() (MessageType, []byte, error) {
 	return opcode, payload, nil
 }
 
-func (c *BaseConnection) ReadMessageTimeout(timeout time.Duration) (MessageType, []byte, error) {
+// ReadMessageTimeout implements the websocket.Connection.ReadMessageTimeout method
+func (c *SimpleConnection) ReadMessageTimeout(timeout time.Duration) (MessageType, []byte, error) {
 	c.conn.SetReadDeadline(time.Now().Add(timeout))
 	return c.ReadMessage()
 }
 
-func (c *BaseConnection) WriteMessage(opcode MessageType, payload []byte) error {
+// WriteMessage implements the websocket.Connection.WriteMessage method
+func (c *SimpleConnection) WriteMessage(opcode MessageType, payload []byte) error {
 	return c.WritePacket(byte(opcode), payload)
 }
 
-func (c *BaseConnection) WriteMessageTimeout(timeout time.Duration, opcode MessageType, payload []byte) error {
+// WriteMessageTimeout implements the websocket.Connection.WriteMessageTimeout method
+func (c *SimpleConnection) WriteMessageTimeout(timeout time.Duration, opcode MessageType, payload []byte) error {
 	c.conn.SetWriteDeadline(time.Now().Add(timeout))
 	return c.WriteMessage(opcode, payload)
 }

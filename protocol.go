@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"compress/flate"
 	"encoding/binary"
-	"sync"
 	"errors"
 	"math"
+	"sync"
 )
 
 const (
@@ -134,6 +134,8 @@ func Unmask(buff, mask []byte) {
 	}
 }
 
+// EncodePacket generates a byte array with the packet encoded according with
+// the RFC 6455
 func EncodePacket(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloadLen uint64, maskingKey []byte, payload []byte) ([]byte, error) {
 	if (maskingKey != nil) && (len(maskingKey) != 4) {
 		return nil, errorWrongMaskKey

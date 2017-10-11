@@ -6,8 +6,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/valyala/fasthttp"
-	"net"
 	"log"
+	"net"
 )
 
 var (

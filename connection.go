@@ -1,53 +1,88 @@
 package websocket
 
 import (
-	"net"
-	"io"
-	"time"
 	"encoding/binary"
 	"errors"
+	"io"
+	"net"
+	"time"
 )
 
+// ConnectionState represents the state of the websocket connection.
 type ConnectionState byte
 
 const (
+	// ConnectionStateConnecting represents the initial state of a connection
 	ConnectionStateConnecting = iota
+	// ConnectionStateOpen represents a opened health connection
 	ConnectionStateOpen
+	// ConnectionStateClosing represents a connection that is closing
 	ConnectionStateClosing
+	// ConnectionStateClosed represents a closed connection
 	ConnectionStateClosed
 )
 
+// ConnectionCloseReason represents the reason informed by the endpoint for
+// closing the connection.
 type ConnectionCloseReason uint16
 
 const (
-	ConnectionCloseReasonNormal                      ConnectionCloseReason = 1000
-	ConnectionCloseReasonGoingDown                   ConnectionCloseReason = 1001
-	ConnectionCloseReasonProtocolError               ConnectionCloseReason = 1002
-	ConnectionCloseReasonDataTypeUnsupported         ConnectionCloseReason = 1003
-	ConnectionCloseReasonInconsistentType            ConnectionCloseReason = 1007
-	ConnectionCloseReasonPolicyViolation             ConnectionCloseReason = 1008
-	ConnectionCloseReasonMessageTooBig               ConnectionCloseReason = 1009
+	// ConnectionCloseReasonNormal happens when the endpoint simply want to end
+	// the connection
+	ConnectionCloseReasonNormal ConnectionCloseReason = 1000
+	// ConnectionCloseReasonGoingDown happens when the server is going down, or
+	// the client is navigating away to another page.
+	ConnectionCloseReasonGoingDown ConnectionCloseReason = 1001
+	// ConnectionCloseReasonProtocolError happens when there is any error on the
+	// protocol
+	ConnectionCloseReasonProtocolError ConnectionCloseReason = 1002
+	// ConnectionCloseReasonDataTypeUnsupported happens when the endpoint
+	// receives a datatype it cannot accept.
+	ConnectionCloseReasonDataTypeUnsupported ConnectionCloseReason = 1003
+	// ConnectionCloseReasonInconsistentType happens when the endpoint receives
+	// a message inconsistent with the type of the message
+	ConnectionCloseReasonInconsistentType ConnectionCloseReason = 1007
+	// ConnectionCloseReasonPolicyViolation happens when the endpoint receives a
+	// message that violates its policy
+	ConnectionCloseReasonPolicyViolation ConnectionCloseReason = 1008
+	// ConnectionCloseReasonMessageTooBig happens when the endpoint receives a
+	// message bigger than it can process.
+	ConnectionCloseReasonMessageTooBig ConnectionCloseReason = 1009
+	// ConnectionCloseReasonCouldNotNegotiateExtensions happens when the client
+	// and the server fail to negotiate the extensions.
 	ConnectionCloseReasonCouldNotNegotiateExtensions ConnectionCloseReason = 1010
-	ConnectionCloseReasonUnexpected                  ConnectionCloseReason = 1011
+	// ConnectionCloseReasonUnexpected happens when the server is terminating
+	// the connection because it encoutered an unexpected condition
+	ConnectionCloseReasonUnexpected ConnectionCloseReason = 1011
 )
 
+// MessageType represents the type of message defined by the RFC 6455
 type MessageType byte
 
 const (
-	MessageTypeContinuation    MessageType = 0
-	MessageTypeText            MessageType = 1
-	MessageTypeBinary          MessageType = 2
+	// MessageTypeContinuation represents a continuation
+	MessageTypeContinuation MessageType = 0
+	// MessageTypeText represents a text frame
+	MessageTypeText MessageType = 1
+	// MessageTypeBinary represents a binary frame
+	MessageTypeBinary MessageType = 2
+	// MessageTypeConnectionClose represents a closing message and the
+	// connection will be closed right away
 	MessageTypeConnectionClose MessageType = 8
-	MessageTypePing            MessageType = 9
-	MessageTypePong            MessageType = 10
+	// MessageTypePing represents a ping frame
+	MessageTypePing MessageType = 9
+	// MessageTypePong represents a pong frame
+	MessageTypePong MessageType = 10
 )
 
 var (
-	errorMissingMaskingKey = errors.New("Protocol error: Missing masking key.")
+	errorMissingMaskingKey = errors.New("protocol error: missing masking key")
 )
 
+// Connection is the minimum representation of a websocket connection
 type Connection interface {
 	Init(context *ConnectionContext)
+	Reset()
 
 	Conn() net.Conn
 
@@ -97,24 +132,29 @@ func (c *BaseConnection) Reset() {
 	c.state = ConnectionStateClosed
 }
 
+// Init implements the websocket.Connection.Init
 func (c *BaseConnection) Init(ctx *ConnectionContext) {
 	c.compressed = ctx.Compressed
 	c.conn = ctx.Conn
 	c.state = ConnectionStateOpen
 }
 
+// Conn implements the websocket.Connection.Conn
 func (c *BaseConnection) Conn() net.Conn {
 	return c.conn
 }
 
+// State implements the websocket.Connection.State
 func (c *BaseConnection) State() ConnectionState {
 	return c.state
 }
 
+// Read implements the websocket.Connection.Read
 func (c *BaseConnection) Read(b []byte) (int, error) {
 	return c.conn.Read(b)
 }
 
+// ReadPacket implements the websocket.Connection.ReadPacket
 func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
 	n, err := c.Read(c.readBuff)
 	if n == 0 {
@@ -140,11 +180,13 @@ func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
 	return opcode, payload, nil
 }
 
+// ReadPacketTimeout implements the websocket.Connection.ReadPacketTimeout
 func (c *BaseConnection) ReadPacketTimeout(timeout time.Duration) (byte, []byte, error) {
 	c.conn.SetReadDeadline(time.Now().Add(timeout))
 	return c.ReadPacket()
 }
 
+// Write implements the websocket.Connection.Write
 func (c *BaseConnection) Write(b []byte) (int, error) {
 	return c.conn.Write(b)
 }
@@ -153,6 +195,7 @@ func (c *BaseConnection) preparePacket(opcode byte, payload []byte) ([]byte, err
 	return EncodePacket(true, c.compressed, false, false, opcode, uint64(len(payload)), nil, payload)
 }
 
+// WritePacket implements the websocket.Connection.WritePacket
 func (c *BaseConnection) WritePacket(opcode byte, data []byte) error {
 	var err error
 	if c.compressed {
@@ -169,19 +212,23 @@ func (c *BaseConnection) WritePacket(opcode byte, data []byte) error {
 	return err
 }
 
+// WritePacketTimeout implements the websocket.Connection.WritePacketTimeout
 func (c *BaseConnection) WritePacketTimeout(timeout time.Duration, opcode byte, data []byte) error {
 	c.conn.SetWriteDeadline(time.Now().Add(timeout))
 	return c.WritePacket(opcode, data)
 }
 
+// IsClosed implements the websocket.Connection.IsClosed
 func (c *BaseConnection) IsClosed() bool {
 	return c.state == ConnectionStateClosed
 }
 
+// Close implements the websocket.Connection.Close
 func (c *BaseConnection) Close() error {
 	return c.CloseWithReason(ConnectionCloseReasonNormal)
 }
 
+// CloseWithReason implements the websocket.Connection.CloseWithReason
 func (c *BaseConnection) CloseWithReason(reason ConnectionCloseReason) error {
 	c.state = ConnectionStateClosing
 	var payload [2]byte
@@ -189,6 +236,7 @@ func (c *BaseConnection) CloseWithReason(reason ConnectionCloseReason) error {
 	return c.WritePacket(OPCodeConnectionCloseFrame, payload[:])
 }
 
+// Terminate implements the websocket.Connection.Terminate
 func (c *BaseConnection) Terminate() error {
 	err := c.conn.Close()
 	if err == nil {
