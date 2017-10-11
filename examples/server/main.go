@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/valyala/fasthttp"
 	"github.com/jamillosantos/websocket"
+	"github.com/valyala/fasthttp"
 	"log"
 	"time"
 )

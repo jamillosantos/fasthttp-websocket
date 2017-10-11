@@ -185,7 +185,6 @@ func EncodePacket(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloa
 
 	if maskingKey != nil {
 		copy(dst[startAt:], maskingKey)
-		startAt += 4
 	}
 
 	dst = append(dst, payload...)
