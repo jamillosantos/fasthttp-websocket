@@ -5,7 +5,7 @@
 
 **This library is under development**
 
-# fasthttp-websocket
+# Websocket
 
 A WebSocket implementation on top of the fasthttp.
 

@@ -11,15 +11,15 @@ import (
 )
 
 var (
-	globalUID                 = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
-	strUpgrade                = []byte("Upgrade")
-	strConnection             = []byte("Connection")
-	strwebsocket              = []byte("websocket")
-	strSecWebSocketAccept     = []byte("Sec-WebSocket-Accept")
-	strSecWebSocketKey        = []byte("Sec-WebSocket-Key")
-	strSecWebSocketVersion    = []byte("Sec-WebSocket-Version")
-	strSecWebSocketVersion13  = []byte("13")
-	strSecWebSocketProtocol   = []byte("Sec-WebSocket-Protocol")
+	globalUID                = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+	strUpgrade               = []byte("Upgrade")
+	strConnection            = []byte("Connection")
+	strwebsocket             = []byte("websocket")
+	strSecWebSocketAccept    = []byte("Sec-WebSocket-Accept")
+	strSecWebSocketKey       = []byte("Sec-WebSocket-Key")
+	strSecWebSocketVersion   = []byte("Sec-WebSocket-Version")
+	strSecWebSocketVersion13 = []byte("13")
+	// strSecWebSocketProtocol   = []byte("Sec-WebSocket-Protocol")
 	strSecWebSocketExtensions = []byte("Sec-WebSocket-Extensions")
 	strPerMessageDeflate      = []byte("permessage-deflate")
 )
@@ -104,7 +104,11 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx) error {
 	ctx.Response.SetStatusCode(fasthttp.StatusSwitchingProtocols)
 	ctx.Response.Header.AddBytesKV(strUpgrade, strwebsocket)
 	ctx.Response.Header.AddBytesKV(strConnection, strUpgrade)
-	ctx.Response.Header.AddBytesKV(strSecWebSocketAccept, generateAcceptFromKey(key))
+	if acceptKey, err := generateAcceptFromKey(key); err == nil {
+		ctx.Response.Header.AddBytesKV(strSecWebSocketAccept, acceptKey)
+	} else {
+		return err
+	}
 
 	if compress {
 		ctx.Response.Header.AddBytesK(strSecWebSocketExtensions, "permessage-deflate; server_no_context_takeover; client_no_context_takeover")
@@ -113,22 +117,31 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx) error {
 	}
 
 	ctx.Hijack(func(c net.Conn) {
-		u.manager.Accept(&ConnectionContext{
+		err := u.manager.Accept(&ConnectionContext{
 			Compressed: compress,
 			Conn:       c,
 		})
+		if err != nil {
+			log.Println(err)
+		}
 	})
 	return nil
 }
 
-func generateAcceptFromKey(key []byte) []byte {
+func generateAcceptFromKey(key []byte) ([]byte, error) {
 	s := sha1.New()
-	s.Write(key)
-	s.Write(globalUID)
+	_, err := s.Write(key)
+	if err != nil {
+		return nil, err
+	}
+	_, err = s.Write(globalUID)
+	if err != nil {
+		return nil, err
+	}
 	data := s.Sum(nil)
 	result := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
 	base64.StdEncoding.Encode(result, data)
-	return result
+	return result, nil
 }
 
 func headerVisit(header []byte, f func(name, value []byte) bool) {

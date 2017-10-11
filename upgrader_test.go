@@ -25,8 +25,6 @@ func buildValidCtx() *fasthttp.RequestCtx {
 	return ctx
 }
 
-func noopHandler(conn Connection) {}
-
 var _ = Describe("Upgrader", func() {
 	It("should check generating accepts for keys", func() {
 		Expect(generateAcceptFromKey([]byte("bu+Y8NrjcUTuR6rM3u8KQg=="))).To(Equal([]byte("53BdvpuochdSseQfEcKbg7HYqVo=")))

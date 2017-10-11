@@ -161,12 +161,20 @@ func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
 		// No data
 		return 0, nil, nil
 	}
-	if err == io.EOF {
-		err = nil
+	if err != io.EOF {
+		return 0, nil, err
 	}
 	_, _, _, _, opcode, _, maskingKey, payload, err := DecodePacket(c.readBuff[:n])
+
+	if err != nil {
+		return 0, nil, err
+	}
+
 	if maskingKey == nil {
-		c.CloseWithReason(ConnectionCloseReasonProtocolError)
+		err = c.CloseWithReason(ConnectionCloseReasonProtocolError)
+		if err != nil {
+			return 0, nil, err
+		}
 		return 0, nil, errorMissingMaskingKey
 	}
 	Unmask(payload, maskingKey)
@@ -182,7 +190,9 @@ func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
 
 // ReadPacketTimeout implements the websocket.Connection.ReadPacketTimeout
 func (c *BaseConnection) ReadPacketTimeout(timeout time.Duration) (byte, []byte, error) {
-	c.conn.SetReadDeadline(time.Now().Add(timeout))
+	if err := c.conn.SetReadDeadline(time.Now().Add(timeout)); err == nil {
+		return 0, nil, err
+	}
 	return c.ReadPacket()
 }
 
@@ -214,7 +224,9 @@ func (c *BaseConnection) WritePacket(opcode byte, data []byte) error {
 
 // WritePacketTimeout implements the websocket.Connection.WritePacketTimeout
 func (c *BaseConnection) WritePacketTimeout(timeout time.Duration, opcode byte, data []byte) error {
-	c.conn.SetWriteDeadline(time.Now().Add(timeout))
+	if err := c.conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return err
+	}
 	return c.WritePacket(opcode, data)
 }
 

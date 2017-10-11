@@ -8,6 +8,10 @@ import (
 // successfully upgrading the connection.
 type ConnectionHandler func(conn Connection) error
 
+// ConnectionErrorHandler represents the handler that will receive the connection
+// reference and an error that occurred.
+type ConnectionErrorHandler func(conn Connection, err error)
+
 // MessageHandler represents the handler for a message.
 type MessageHandler func(conn Connection, opcode MessageType, payload []byte) error
 

@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"testing"
+	"log"
 )
 
 func TestProtocol(t *testing.T) {
@@ -301,11 +302,17 @@ var _ = Describe("Protocol", func() {
 })
 
 func BenchmarkDecodePacket_SingleFrameUnmaskedText(b *testing.B) {
-	DecodePacket(singleFrameUnmaskedText)
+	_, _, _, _, _, _, _, _, err := DecodePacket(singleFrameUnmaskedText)
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 func BenchmarkDecodePacket_SingleFrameMaskedText(b *testing.B) {
-	DecodePacket(singleFrameMaskedText)
+	_, _, _, _, _, _, _, _, err := DecodePacket(singleFrameMaskedText)
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 func BenchmarkUnmask(b *testing.B) {
@@ -318,5 +325,8 @@ func BenchmarkDeflate(b *testing.B) {
 	buff := make([]byte, len(singleFrameMaskedFlatedTextPayload))
 	copy(buff, singleFrameMaskedFlatedTextPayload)
 	Unmask(buff, singleFrameMaskedFlatedTextMask)
-	Deflate(make([]byte, 0, 1024), buff)
+	_, err := Deflate(make([]byte, 0, 1024), buff)
+	if err != nil {
+		log.Println(err)
+	}
 }
