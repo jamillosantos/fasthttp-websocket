@@ -1,7 +1,7 @@
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)]()
-[![Build Status](https://travis-ci.org/jamillosantos/fasthttp-websocket.svg?branch=master)](https://travis-ci.org/jamillosantos/fasthttp-websocket)
-[![Coverage Status](https://coveralls.io/repos/github/jamillosantos/fasthttp-websocket/badge.svg?branch=master)](https://coveralls.io/github/jamillosantos/fasthttp-websocket?branch=master)
-[![Go Report Card](https://goreportcard.com/badge/github.com/jamillosantos/migration)](https://goreportcard.com/report/github.com/jamillosantos/fasthttp-websocket)
+[![Build Status](https://travis-ci.org/jamillosantos/websocket.svg?branch=master)](https://travis-ci.org/jamillosantos/websocket)
+[![Coverage Status](https://coveralls.io/repos/github/jamillosantos/websocket/badge.svg?branch=master)](https://coveralls.io/github/jamillosantos/websocket?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jamillosantos/websocket)](https://goreportcard.com/report/github.com/jamillosantos/websocket)
 
 **This library is under development**
 
