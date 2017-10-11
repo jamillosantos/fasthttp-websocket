@@ -5,6 +5,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"log"
 	"time"
+	"fmt"
 )
 
 func main() {
@@ -25,7 +26,15 @@ func main() {
 	}
 	upgrader := websocket.NewUpgrader(manager)
 	server.Handler = func(ctx *fasthttp.RequestCtx) {
-		upgrader.Upgrade(ctx)
+		switch string(ctx.URI().Path()) {
+		case "/ws":
+			upgrader.Upgrade(ctx)
+		case "/":
+			fmt.Fprint(ctx, "This is the root of the server")
+		default:
+			fmt.Fprint(ctx, "404 Not Found")
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
+		}
 	}
 
 	server.ListenAndServe(":8080")

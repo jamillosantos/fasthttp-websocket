@@ -88,6 +88,9 @@ type Connection interface {
 
 	State() ConnectionState
 
+	Context() interface{}
+	SetContext(value interface{})
+
 	Read(buffer []byte) (int, error)
 	Write(data []byte) (int, error)
 
@@ -110,6 +113,7 @@ type Connection interface {
 
 // BaseConnection represents a connection with a client
 type BaseConnection struct {
+	context    interface{}
 	readBuff   []byte
 	conn       net.Conn
 	state      ConnectionState
@@ -147,6 +151,14 @@ func (c *BaseConnection) Conn() net.Conn {
 // State implements the websocket.Connection.State
 func (c *BaseConnection) State() ConnectionState {
 	return c.state
+}
+
+func (c *BaseConnection) Context() interface{} {
+	return c.context
+}
+
+func (c *BaseConnection) SetContext(value interface{}) {
+	c.context = value
 }
 
 // Read implements the websocket.Connection.Read
