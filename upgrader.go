@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/valyala/fasthttp"
 	"net"
-	"sync"
+	"log"
 )
 
 var (
@@ -21,6 +21,7 @@ var (
 	strSecWebSocketVersion13  = []byte("13")
 	strSecWebSocketProtocol   = []byte("Sec-WebSocket-Protocol")
 	strSecWebSocketExtensions = []byte("Sec-WebSocket-Extensions")
+	strPerMessageDeflate      = []byte("permessage-deflate")
 )
 
 // HandshakeError represents an handshake error while upgrading a connection.
@@ -32,26 +33,17 @@ func (e HandshakeError) Error() string {
 	return e.message
 }
 
-// ConnHandler represents the handler that the Upgrader will trigger after
-// successfully upgrading the connection.
-type ConnHandler func(conn *Conn)
-
 // Upgrader implements build the HTTP Package for upgrading the connection from
 // regular HTTP Request to a Websocket request.
 type Upgrader struct {
-	Error func(ctx *fasthttp.RequestCtx, reason error)
-
-	conns sync.Pool
+	manager Manager
+	Error   func(ctx *fasthttp.RequestCtx, reason error)
 }
 
 // NewUpgrader returns a new instance of an websocket.Upgrader
-func NewUpgrader() *Upgrader {
+func NewUpgrader(manager Manager) *Upgrader {
 	return &Upgrader{
-		conns: sync.Pool{
-			New: func() interface{} {
-				return &Conn{}
-			},
-		},
+		manager: manager,
 	}
 }
 
@@ -70,7 +62,7 @@ func (u *Upgrader) reportError(ctx *fasthttp.RequestCtx, status int, reason stri
 // Upgrade upgrades the request to the websocket protocol
 //
 // TODO To document
-func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handler ConnHandler) error {
+func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx) error {
 	if !ctx.IsGet() {
 		return u.reportError(ctx, fasthttp.StatusMethodNotAllowed, "Method not allowed")
 	}
@@ -97,6 +89,16 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handler ConnHandler) error 
 		return u.reportError(ctx, fasthttp.StatusBadRequest, "The version is not supported.")
 	}
 
+	compress := false
+	headerVisit(ctx.Request.Header.PeekBytes(strSecWebSocketExtensions), func(k, v []byte) bool {
+		log.Println(string(v))
+		if bytes.Equal(v, strPerMessageDeflate) {
+			compress = true
+			return false
+		}
+		return true
+	})
+
 	// TODO: Check origin
 
 	ctx.Response.SetStatusCode(fasthttp.StatusSwitchingProtocols)
@@ -104,13 +106,17 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handler ConnHandler) error 
 	ctx.Response.Header.AddBytesKV(strConnection, strUpgrade)
 	ctx.Response.Header.AddBytesKV(strSecWebSocketAccept, generateAcceptFromKey(key))
 
-	// TODO: If compressions requested
-	ctx.Response.Header.AddBytesK(strSecWebSocketExtensions, "permessage-deflate; server_no_context_takeover; client_no_context_takeover")
+	if compress {
+		ctx.Response.Header.AddBytesK(strSecWebSocketExtensions, "permessage-deflate; server_no_context_takeover; client_no_context_takeover")
+	} else {
+		ctx.Response.Header.AddBytesK(strSecWebSocketExtensions, "server_no_context_takeover; client_no_context_takeover")
+	}
 
 	ctx.Hijack(func(c net.Conn) {
-		conn := u.conns.Get().(*Conn)
-		conn.conn = c
-		handler(conn)
+		u.manager.Accept(&ConnectionContext{
+			Compressed: compress,
+			Conn:       c,
+		})
 	})
 	return nil
 }
@@ -138,7 +144,7 @@ func headerVisit(header []byte, f func(name, value []byte) bool) {
 			found = false
 			for i < l {
 				b = header[i]
-				if b == ',' {
+				if b == ';' {
 					if !f(header[bAt:bAt], header[bAt:i]) {
 						return
 					}
@@ -156,7 +162,7 @@ func headerVisit(header []byte, f func(name, value []byte) bool) {
 					}
 					bAt = i
 					for i < l {
-						if header[i] == ',' {
+						if header[i] == ';' {
 							break
 						}
 						i++

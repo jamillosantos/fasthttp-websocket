@@ -25,7 +25,7 @@ func buildValidCtx() *fasthttp.RequestCtx {
 	return ctx
 }
 
-func noopHandler(conn *Conn) {}
+func noopHandler(conn Connection) {}
 
 var _ = Describe("Upgrader", func() {
 	It("should check generating accepts for keys", func() {
@@ -131,7 +131,7 @@ var _ = Describe("Upgrader", func() {
 
 		It("should visit a two values sticked", func() {
 			list := make([]string, 0)
-			headerVisit([]byte("foo,bar"), func(name, value []byte) bool {
+			headerVisit([]byte("foo;bar"), func(name, value []byte) bool {
 				Expect(string(name)).To(BeEmpty())
 				list = append(list, string(value))
 				return true
@@ -148,7 +148,7 @@ var _ = Describe("Upgrader", func() {
 
 		It("should visit a two named values sticked", func() {
 			list := make([]keyValue, 0)
-			headerVisit([]byte("foo=bar,john=doe"), func(name, value []byte) bool {
+			headerVisit([]byte("foo=bar;john=doe"), func(name, value []byte) bool {
 				list = append(list, keyValue{string(name), string(value)})
 				return true
 			})
@@ -161,7 +161,7 @@ var _ = Describe("Upgrader", func() {
 
 		It("should visit an empty named", func() {
 			list := make([]keyValue, 0)
-			headerVisit([]byte("foo=,john=doe"), func(name, value []byte) bool {
+			headerVisit([]byte("foo=;john=doe"), func(name, value []byte) bool {
 				list = append(list, keyValue{string(name), string(value)})
 				return true
 			})
@@ -174,7 +174,7 @@ var _ = Describe("Upgrader", func() {
 
 		It("should visit an empty named at the end", func() {
 			list := make([]keyValue, 0)
-			headerVisit([]byte("foo=bar,john="), func(name, value []byte) bool {
+			headerVisit([]byte("foo=bar;john="), func(name, value []byte) bool {
 				list = append(list, keyValue{string(name), string(value)})
 				return true
 			})
@@ -187,7 +187,7 @@ var _ = Describe("Upgrader", func() {
 
 		It("should visit an empty value between valid values", func() {
 			list := make([]string, 0)
-			headerVisit([]byte("foo,,bar, , final"), func(name, value []byte) bool {
+			headerVisit([]byte("foo;;bar; ; final"), func(name, value []byte) bool {
 				Expect(string(name)).To(BeEmpty())
 				list = append(list, string(value))
 				return true
@@ -202,7 +202,7 @@ var _ = Describe("Upgrader", func() {
 
 		It("should visit an empty value between valid named values", func() {
 			list := make([]keyValue, 0)
-			headerVisit([]byte("foo=bar,,john=doe, , fin=al"), func(name, value []byte) bool {
+			headerVisit([]byte("foo=bar;;john=doe; ; fin=al"), func(name, value []byte) bool {
 				list = append(list, keyValue{string(name), string(value)})
 				return true
 			})
@@ -221,7 +221,7 @@ var _ = Describe("Upgrader", func() {
 
 		It("should visit multiple values", func() {
 			list := make([]string, 0)
-			headerVisit([]byte("foo, bar, john, doe"), func(name, value []byte) bool {
+			headerVisit([]byte("foo; bar; john; doe"), func(name, value []byte) bool {
 				Expect(string(name)).To(BeEmpty())
 				list = append(list, string(value))
 				return true
@@ -235,7 +235,7 @@ var _ = Describe("Upgrader", func() {
 
 		It("should visit mix of values and named and empty values", func() {
 			list := make([]keyValue, 0)
-			headerVisit([]byte("foo=bar, bar, ,, john=,     , doe, john=doe"), func(name, value []byte) bool {
+			headerVisit([]byte("foo=bar; bar; ;; john=;     ; doe; john=doe"), func(name, value []byte) bool {
 				list = append(list, keyValue{string(name), string(value)})
 				return true
 			})
