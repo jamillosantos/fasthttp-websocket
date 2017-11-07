@@ -8,6 +8,8 @@ import (
 )
 
 func main() {
+	log.SetFlags(log.Lshortfile)
+
 	server := &fasthttp.Server{}
 	manager := websocket.NewListeableManager()
 	manager.ReadTimeout = time.Second * 10

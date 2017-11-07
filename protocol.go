@@ -144,7 +144,7 @@ func EncodePacket(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloa
 	l := 2 // Default header
 	if payloadLen > math.MaxUint16 {
 		l += 8 // + 64-bit length
-	} else if payloadLen > uint64(payloadLen16bits) {
+	} else if payloadLen >= uint64(payloadLen16bits) {
 		l += 2 // + 16-bit length
 	}
 	if maskingKey != nil {
@@ -173,7 +173,7 @@ func EncodePacket(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloa
 	startAt := positionMaskPayloadLenExtended
 	if payloadLen < uint64(payloadLen16bits) {
 		dst[positionMaskPayloadLen] = maskingValue | (maskPayloadLen & byte(payloadLen))
-	} else if payloadLen < math.MaxUint16 {
+	} else if payloadLen <= math.MaxUint16 {
 		dst[positionMaskPayloadLen] = maskingValue | payloadLen16bits
 		binary.BigEndian.PutUint16(dst[positionMaskPayloadLenExtended:], uint16(payloadLen))
 		startAt += 2
