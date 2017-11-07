@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"sync"
+	"io"
 )
 
 const (
@@ -61,20 +62,20 @@ const (
 )
 
 var (
-	errorUnexpectedEndOfPacket = errors.New("Unexpected end of packet")
-	errorWrongMaskKey          = errors.New("Wrong mask key")
+	ErrUnexpectedEndOfPacket = errors.New("Unexpected end of packet")
+	errorWrongMaskKey        = errors.New("Wrong mask key")
 )
 
 // IsUnexpectedEndOfPacket checks if the given error is of type unexpected end of packet
 func IsUnexpectedEndOfPacket(err error) bool {
-	return err == errorUnexpectedEndOfPacket
+	return err == ErrUnexpectedEndOfPacket
 }
 
 // DecodePacket splits all the information from the raw packet and return it.
 func DecodePacket(buff []byte) (fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloadLen uint64, maskingKey []byte, payload []byte, err error) {
 	buffLen := uint64(len(buff))
-	if buffLen < 3 {
-		return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+	if buffLen < 2 {
+		return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
 	}
 
 	// 1st byte
@@ -93,31 +94,98 @@ func DecodePacket(buff []byte) (fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcod
 	if payloadLen == payloadLen16bitsUint64 {
 		startAt += 2
 		if buffLen < uint64(positionMaskPayloadLenExtended16bitsEnding) {
-			return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+			return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
 		}
 		payloadLen = uint64(binary.BigEndian.Uint16(buff[positionMaskPayloadLenExtended:positionMaskPayloadLenExtended16bitsEnding]))
 	} else if payloadLen == payloadLen64bitsUint64 {
 		startAt += 8
 		if buffLen < uint64(startAt) {
-			return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+			return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
 		}
 		payloadLen = binary.BigEndian.Uint64(buff[positionMaskPayloadLenExtended:positionMaskPayloadLenExtended64bitsEnding])
 	} else if (payloadLen + uint64(positionMaskPayloadLen)) > buffLen {
-		return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+		return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
 	}
 
 	// Check the masking key
 	if masked {
 		startAt += 4
 		if buffLen < uint64(startAt) {
-			return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+			return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
 		}
 		maskingKey = buff[(startAt - 4):startAt]
 	}
 	if buffLen < uint64(startAt)+payloadLen {
-		return false, false, false, false, 0, 0, nil, nil, errorUnexpectedEndOfPacket
+		return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
 	}
 	payload = buff[startAt:(uint64(startAt) + payloadLen)]
+	return
+}
+
+func DecodePacketFromReader(reader io.Reader, buff []byte) (fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloadLen uint64, maskingKey []byte, payload []byte, err error) {
+	var n int
+	buffLen := uint64(len(buff))
+	n, err = reader.Read(buff[:2])
+	if (err != nil && err != io.EOF) || (n < 2) {
+		return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
+	}
+
+	// 1st byte
+	fin = (buff[positionFinRsvsOpCode] & maskFin) == maskFin
+	rsv1 = (buff[positionFinRsvsOpCode] & maskRsv1) == maskFin
+	rsv2 = (buff[positionFinRsvsOpCode] & maskRsv2) == maskFin
+	rsv3 = (buff[positionFinRsvsOpCode] & maskRsv3) == maskFin
+	opcode = buff[positionFinRsvsOpCode] & maskOpCode
+
+	// 2nd byte
+	masked := (buff[positionMaskPayloadLen] & maskMask) == maskMask
+	pl := buff[positionMaskPayloadLen] & (maskPayloadLen)
+	payloadLen = uint64(pl)
+
+	// Check if the payload length is extended
+	startAt := positionMaskPayloadLenExtended
+	if payloadLen == payloadLen16bitsUint64 {
+		n, err = reader.Read(buff[:2])
+		if (n != 2) || (err != nil) {
+			err = ErrUnexpectedEndOfPacket
+			return
+		}
+		payloadLen = uint64(binary.BigEndian.Uint16(buff[:2]))
+	} else if payloadLen == payloadLen64bitsUint64 {
+		n, err = reader.Read(buff[:8])
+		if (n != 8) || (err != nil) {
+			err = ErrUnexpectedEndOfPacket
+			return
+		}
+		payloadLen = binary.BigEndian.Uint64(buff[:8])
+	}
+
+	// Check the masking key
+	if masked {
+		n, err = reader.Read(buff[:4])
+		if buffLen < uint64(startAt) {
+			return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
+		}
+		maskingKey = make([]byte, 4)
+		copy(maskingKey, buff[:4])
+	}
+	if buffLen < payloadLen {
+		payload = make([]byte, payloadLen)
+		n, err = reader.Read(payload)
+	} else {
+		n, err = reader.Read(buff[:payloadLen])
+		if (err != nil && err != io.EOF) || uint64(n) < payloadLen {
+			return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
+		}
+		if err != nil && err != io.EOF {
+			return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
+		}
+		payload = buff[:n]
+	}
+	if err != nil && err != io.EOF {
+		return false, false, false, false, 0, 0, nil, nil, err
+	}
+	err = nil
 	return
 }
 

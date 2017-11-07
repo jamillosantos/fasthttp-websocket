@@ -3,7 +3,6 @@ package websocket
 import (
 	"net"
 	"time"
-	"log"
 )
 
 // SimpleConnection represents a connection with a client
@@ -31,7 +30,6 @@ func (c *SimpleConnection) ReadMessage() (MessageType, []byte, error) {
 	}
 
 	opcode := MessageType(opc)
-	log.Println(opcode)
 	c.lastMessageAt = time.Now()
 	if opcode == MessageTypePing {
 		if c.state == ConnectionStateOpen {
@@ -44,6 +42,7 @@ func (c *SimpleConnection) ReadMessage() (MessageType, []byte, error) {
 		return 0, nil, nil
 	} else if opcode == MessageTypeConnectionClose {
 		c.state = ConnectionStateClosing
+		c.Close()
 		err = c.Terminate()
 		return 0, nil, err
 	}

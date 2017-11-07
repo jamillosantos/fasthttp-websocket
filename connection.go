@@ -3,7 +3,6 @@ package websocket
 import (
 	"encoding/binary"
 	"errors"
-	"io"
 	"net"
 	"time"
 )
@@ -113,18 +112,20 @@ type Connection interface {
 
 // BaseConnection represents a connection with a client
 type BaseConnection struct {
-	context    interface{}
-	readBuff   []byte
-	conn       net.Conn
-	state      ConnectionState
-	compressed bool
+	context        interface{}
+	readHeaderBuff []byte
+	readBuff       []byte
+	conn           net.Conn
+	state          ConnectionState
+	compressed     bool
 }
 
 // NewConn initialized and return a new websocket.BaseConnection instance
 func NewConn(conn net.Conn) *BaseConnection {
 	return &BaseConnection{
-		readBuff: make([]byte, 1024*8),
-		conn:     conn,
+		readHeaderBuff: make([]byte, 2),
+		readBuff:       make([]byte, 1024*8),
+		conn:           conn,
 	}
 }
 
@@ -168,16 +169,7 @@ func (c *BaseConnection) Read(b []byte) (int, error) {
 
 // ReadPacket implements the websocket.Connection.ReadPacket
 func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
-	n, err := c.Read(c.readBuff)
-	if n == 0 {
-		// No data
-		return 0, nil, nil
-	}
-	if (err != nil) && (err != io.EOF) {
-		return 0, nil, err
-	}
-	_, _, _, _, opcode, _, maskingKey, payload, err := DecodePacket(c.readBuff[:n])
-
+	_, _, _, _, opcode, _, maskingKey, payload, err := DecodePacketFromReader(c, c.readBuff)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -189,9 +181,10 @@ func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
 		}
 		return 0, nil, errorMissingMaskingKey
 	}
-	Unmask(payload, maskingKey)
+
+	Unmask(payload, maskingKey) // Always masked
 	if c.compressed && (opcode != OPCodeConnectionCloseFrame) {
-		dpayload, err := Deflate(make([]byte, 0, 1024), payload)
+		dpayload, err := Deflate(make([]byte, 0, len(payload)), payload)
 		if err != nil {
 			return 0, nil, err
 		}

@@ -74,6 +74,8 @@ func (cm *ListenableManager) Accept(ctx *ConnectionContext) (err error) {
 			if err != nil && cm.OnMessageError != nil {
 				cm.OnMessageError(c, err)
 			}
+		} else if err != nil {
+			cm.OnMessageError(c, err)
 		}
 	}
 	return cm.OnClose(c)

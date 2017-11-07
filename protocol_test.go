@@ -6,6 +6,7 @@ import (
 
 	"log"
 	"testing"
+	"bytes"
 )
 
 func TestProtocol(t *testing.T) {
@@ -16,6 +17,8 @@ func TestProtocol(t *testing.T) {
 var (
 	singleFrameUnmaskedText        = []byte{0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f}
 	singleFrameUnmaskedTextPayload = []byte{0x48, 0x65, 0x6c, 0x6c, 0x6f}
+
+	singleFrameUnmaskedZeroLengthText = []byte{0x81, 0x00}
 
 	singleFrameMaskedText        = []byte{0x81, 0x85, 0x37, 0xfa, 0x21, 0x3d, 0x7f, 0x9f, 0x4d, 0x51, 0x58}
 	singleFrameMaskedTextMask    = []byte{0x37, 0xfa, 0x21, 0x3d}
@@ -57,8 +60,71 @@ var _ = Describe("Protocol", func() {
 			Expect(payload).To(Equal(singleFrameUnmaskedTextPayload))
 		})
 
+		It("should parse a single-frame unmasked text message using reader", func() {
+			reader := bytes.NewReader(singleFrameUnmaskedText)
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodeTextFrame)))
+			Expect(payloadLen).To(Equal(uint64(len(singleFrameUnmaskedTextPayload))))
+			Expect(maskingKey).To(BeNil())
+			Expect(payload).To(HaveLen(int(payloadLen)))
+			Expect(payload).To(Equal(singleFrameUnmaskedTextPayload))
+		})
+
+		It("should parse a single-frame unmasked zero length text message", func() {
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacket(singleFrameUnmaskedZeroLengthText)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodeTextFrame)))
+			Expect(payloadLen).To(Equal(uint64(0)))
+			Expect(maskingKey).To(BeNil())
+			Expect(payload).To(HaveLen(int(0)))
+		})
+
+		It("should parse a single-frame unmasked zero length text message with reader", func() {
+			reader := bytes.NewReader(singleFrameUnmaskedZeroLengthText)
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodeTextFrame)))
+			Expect(payloadLen).To(Equal(uint64(0)))
+			Expect(maskingKey).To(BeNil())
+			Expect(payload).To(HaveLen(int(0)))
+		})
+
 		It("should parse a single-frame masked text message", func() {
 			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacket(singleFrameMaskedText)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodeTextFrame)))
+			Expect(payloadLen).To(Equal(uint64(len(singleFrameMaskedTextPayload))))
+			Expect(maskingKey).To(Equal(singleFrameMaskedTextMask))
+			Expect(payload).To(HaveLen(int(payloadLen)))
+			Expect(payload).To(Equal(singleFrameMaskedTextPayload))
+		})
+
+		It("should parse a single-frame masked text message with header and body functions", func() {
+			reader := bytes.NewReader(singleFrameMaskedText)
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
 			Expect(err).To(BeNil())
 			Expect(fin).To(BeTrue())
 			Expect(rsv1).To(BeFalse())
@@ -85,8 +151,42 @@ var _ = Describe("Protocol", func() {
 			Expect(payload).To(Equal(fragmentedUnmaskedText1Payload))
 		})
 
+		It("should parse a fragmented unmasked text message, first part with reader", func() {
+			reader := bytes.NewReader(fragmentedUnmaskedText1)
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeFalse())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodeTextFrame)))
+			Expect(payloadLen).To(Equal(uint64(len(fragmentedUnmaskedText1Payload))))
+			Expect(maskingKey).To(BeNil())
+			Expect(payload).To(HaveLen(int(payloadLen)))
+			Expect(payload).To(Equal(fragmentedUnmaskedText1Payload))
+		})
+
 		It("should parse a fragmented unmasked text message, second part", func() {
 			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacket(fragmentedUnmaskedText2)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodeContinuationFrame)))
+			Expect(payloadLen).To(Equal(uint64(len(fragmentedUnmaskedText2Payload))))
+			Expect(maskingKey).To(BeNil())
+			Expect(payload).To(HaveLen(int(payloadLen)))
+			Expect(payload).To(Equal(fragmentedUnmaskedText2Payload))
+		})
+
+		It("should parse a fragmented unmasked text message, second part with reader", func() {
+			reader := bytes.NewReader(fragmentedUnmaskedText2)
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
 			Expect(err).To(BeNil())
 			Expect(fin).To(BeTrue())
 			Expect(rsv1).To(BeFalse())
@@ -113,8 +213,42 @@ var _ = Describe("Protocol", func() {
 			Expect(payload).To(Equal(singleFrameUnmaskedPingRequestPayload))
 		})
 
+		It("should parse a masked ping request with reader", func() {
+			reader := bytes.NewReader(singleFrameUnmaskedPingRequest)
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodePingFrame)))
+			Expect(payloadLen).To(Equal(uint64(len(singleFrameUnmaskedPingRequestPayload))))
+			Expect(maskingKey).To(BeNil())
+			Expect(payload).To(HaveLen(int(payloadLen)))
+			Expect(payload).To(Equal(singleFrameUnmaskedPingRequestPayload))
+		})
+
 		It("should parse an unmasked pong response", func() {
 			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacket(singleFrameMaskedPongResponse)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodePongFrame)))
+			Expect(payloadLen).To(Equal(uint64(len(singleFrameMaskedPongResponsePayload))))
+			Expect(maskingKey).To(Equal(singleFrameMaskedPongResponseMask))
+			Expect(payload).To(HaveLen(int(payloadLen)))
+			Expect(payload).To(Equal(singleFrameMaskedPongResponsePayload))
+		})
+
+		It("should parse an unmasked pong response with reader", func() {
+			reader := bytes.NewReader(singleFrameMaskedPongResponse)
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
 			Expect(err).To(BeNil())
 			Expect(fin).To(BeTrue())
 			Expect(rsv1).To(BeFalse())
@@ -140,8 +274,40 @@ var _ = Describe("Protocol", func() {
 			Expect(payload).To(HaveLen(int(256)))
 		})
 
+		It("should parse a package with payload 256 bytes long with reader", func() {
+			reader := bytes.NewReader(append(singleFrameBinaryUnmasked256BytesLongHeader, make([]byte, 256)...))
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodeBinaryFrame)))
+			Expect(payloadLen).To(Equal(uint64(256)))
+			Expect(maskingKey).To(BeNil())
+			Expect(payload).To(HaveLen(int(256)))
+		})
+
 		It("should parse a package with payload 64 KBytes long", func() {
 			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacket(append(singleFrameBinaryUnmasked64KBytesLongHeader, make([]byte, 1024*64)...))
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodeBinaryFrame)))
+			Expect(payloadLen).To(Equal(uint64(1024 * 64)))
+			Expect(maskingKey).To(BeNil())
+			Expect(payload).To(HaveLen(int(1024 * 64)))
+		})
+
+		It("should parse a package with payload 64 KBytes long with reader", func() {
+			reader := bytes.NewReader(append(singleFrameBinaryUnmasked64KBytesLongHeader, make([]byte, 1024*64)...))
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
 			Expect(err).To(BeNil())
 			Expect(fin).To(BeTrue())
 			Expect(rsv1).To(BeFalse())
@@ -167,8 +333,34 @@ var _ = Describe("Protocol", func() {
 			Expect(payload).To(Equal(singleFrameMaskedFlatedTextPayload))
 		})
 
+		It("should parse a single frame masked and flated with reader", func() {
+			reader := bytes.NewReader(singleFrameMaskedFlatedText)
+			buff := make([]byte, 1024*8)
+
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
+			Expect(err).To(BeNil())
+			Expect(fin).To(BeTrue())
+			Expect(rsv1).To(BeFalse())
+			Expect(rsv2).To(BeFalse())
+			Expect(rsv3).To(BeFalse())
+			Expect(opcode).To(Equal(byte(OPCodeTextFrame)))
+			Expect(payloadLen).To(Equal(uint64(len(singleFrameMaskedFlatedTextPayload))))
+			Expect(maskingKey).To(Equal(singleFrameMaskedFlatedTextMask))
+			Expect(payload).To(HaveLen(int(payloadLen)))
+			Expect(payload).To(Equal(singleFrameMaskedFlatedTextPayload))
+		})
+
 		It("should fail parsing a broken single-frame unmasked text message with no minimum requirement", func() {
 			_, _, _, _, _, _, _, _, err := DecodePacket(singleFrameUnmaskedText[:2])
+			Expect(err).NotTo(BeNil())
+			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
+		})
+
+		It("should fail parsing a broken single-frame unmasked text message with no minimum requirement with reader", func() {
+			reader := bytes.NewReader(singleFrameUnmaskedText[:1])
+			buff := make([]byte, 1024*8)
+
+			_, _, _, _, _, _, _, _, err := DecodePacketFromReader(reader, buff)
 			Expect(err).NotTo(BeNil())
 			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
 		})
@@ -183,8 +375,33 @@ var _ = Describe("Protocol", func() {
 			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
 		})
 
+		It("should fail parsing a broken single-frame unmasked text message with no 16-bits length with reader", func() {
+			reader := bytes.NewReader(singleFrameBinaryUnmasked256BytesLongHeader[:4])
+			buff := make([]byte, 1024*8)
+
+			_, _, _, _, _, _, _, _, err := DecodePacketFromReader(reader, buff)
+			Expect(err).NotTo(BeNil())
+			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
+
+			reader = bytes.NewReader(singleFrameBinaryUnmasked256BytesLongHeader[:3])
+			buff = make([]byte, 1024*8)
+
+			_, _, _, _, _, _, _, _, err = DecodePacketFromReader(reader, buff)
+			Expect(err).NotTo(BeNil())
+			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
+		})
+
 		It("should fail parsing a broken single-frame unmasked text message with no 64-bits length", func() {
 			_, _, _, _, _, _, _, _, err := DecodePacket(singleFrameBinaryUnmasked64KBytesLongHeader[:9])
+			Expect(err).NotTo(BeNil())
+			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
+		})
+
+		It("should fail parsing a broken single-frame unmasked text message with no 64-bits length with reader", func() {
+			reader := bytes.NewReader(singleFrameBinaryUnmasked64KBytesLongHeader[:9])
+			buff := make([]byte, 1024*8)
+
+			_, _, _, _, _, _, _, _, err := DecodePacketFromReader(reader, buff)
 			Expect(err).NotTo(BeNil())
 			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
 		})
@@ -195,8 +412,26 @@ var _ = Describe("Protocol", func() {
 			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
 		})
 
+		It("should fail parsing single-frame masked text message broken at the mask with reader", func() {
+			reader := bytes.NewReader(singleFrameMaskedFlatedText[:6])
+			buff := make([]byte, 1024*8)
+
+			_, _, _, _, _, _, _, _, err := DecodePacketFromReader(reader, buff)
+			Expect(err).NotTo(BeNil())
+			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
+		})
+
 		It("should fail parsing single-frame masked text message broken at the payload", func() {
 			_, _, _, _, _, _, _, _, err := DecodePacket(singleFrameMaskedFlatedText[:11])
+			Expect(err).NotTo(BeNil())
+			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
+		})
+
+		It("should fail parsing single-frame masked text message broken at the payload with reader", func() {
+			reader := bytes.NewReader(singleFrameMaskedFlatedText[:11])
+			buff := make([]byte, 1024*8)
+
+			_, _, _, _, _, _, _, _, err := DecodePacketFromReader(reader, buff)
 			Expect(err).NotTo(BeNil())
 			Expect(IsUnexpectedEndOfPacket(err)).To(BeTrue())
 		})
