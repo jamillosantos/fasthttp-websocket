@@ -173,7 +173,7 @@ func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
 		// No data
 		return 0, nil, nil
 	}
-	if err != io.EOF {
+	if (err != nil) && (err != io.EOF) {
 		return 0, nil, err
 	}
 	_, _, _, _, opcode, _, maskingKey, payload, err := DecodePacket(c.readBuff[:n])

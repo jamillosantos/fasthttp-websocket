@@ -8,13 +8,15 @@ import (
 	"github.com/valyala/fasthttp"
 	"log"
 	"net"
+	"strings"
 )
 
 var (
 	globalUID                = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 	strUpgrade               = []byte("Upgrade")
 	strConnection            = []byte("Connection")
-	strwebsocket             = []byte("websocket")
+	strstrwebsocket          = "websocket"
+	strwebsocket             = []byte(strstrwebsocket)
 	strSecWebSocketAccept    = []byte("Sec-WebSocket-Accept")
 	strSecWebSocketKey       = []byte("Sec-WebSocket-Key")
 	strSecWebSocketVersion   = []byte("Sec-WebSocket-Version")
@@ -71,8 +73,8 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx) error {
 		return u.reportError(ctx, fasthttp.StatusBadRequest, "Invalid connection type")
 	}
 
-	upgradeTo := ctx.Request.Header.PeekBytes(strUpgrade)
-	if !bytes.Equal(upgradeTo, strwebsocket) {
+	upgradeTo := strings.ToLower(string(ctx.Request.Header.PeekBytes(strUpgrade)))
+	if upgradeTo != strstrwebsocket {
 		return u.reportError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("This connection cannot be upgraded to '%s'", upgradeTo))
 	}
 
@@ -113,7 +115,7 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx) error {
 	if compress {
 		ctx.Response.Header.AddBytesK(strSecWebSocketExtensions, "permessage-deflate; server_no_context_takeover; client_no_context_takeover")
 	} else {
-		ctx.Response.Header.AddBytesK(strSecWebSocketExtensions, "server_no_context_takeover; client_no_context_takeover")
+		// ctx.Response.Header.AddBytesK(strSecWebSocketExtensions, "server_no_context_takeover; client_no_context_takeover")
 	}
 
 	ctx.Hijack(func(c net.Conn) {
