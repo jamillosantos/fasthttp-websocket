@@ -71,6 +71,7 @@ var (
 	ErrTimeout               = errors.New("Timeout")
 	ErrMissingMaskKey        = errors.New("Missing mask key")
 	ErrWrongMaskKey          = errors.New("Wrong mask key")
+	ErrWrongClosingCode      = errors.New("Wrong closing code")
 )
 
 // IsUnexpectedEndOfPacket checks if the given error is of type unexpected end of packet
