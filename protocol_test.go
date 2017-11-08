@@ -37,7 +37,7 @@ var (
 	singleFrameMaskedPongResponsePayload = []byte{0x7f, 0x9f, 0x4d, 0x51, 0x58}
 
 	singleFrameBinaryUnmasked256BytesLongHeader = []byte{0x82, 0x7E, 0x01, 0x00}
-	singleFrameBinaryUnmasked64KBytesLongHeader = []byte{0x82, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00}
+	singleFrameBinaryUnmasked64KBytesLongHeader = []byte{0x82, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x04, 0x00}
 
 	singleFrameMaskedFlatedText        = []byte{0xc1, 0x86, 0xda, 0x7f, 0x9b, 0x17, 0xf0, 0x36, 0xb6, 0x39, 0xdb, 0x7f}
 	singleFrameMaskedFlatedTextMask    = []byte{0xda, 0x7f, 0x9b, 0x17}
@@ -291,20 +291,24 @@ var _ = Describe("Protocol", func() {
 		})
 
 		It("should parse a package with payload 64 KBytes long", func() {
-			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacket(append(singleFrameBinaryUnmasked64KBytesLongHeader, make([]byte, 1024*64)...))
+			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacket(append(singleFrameBinaryUnmasked64KBytesLongHeader, make([]byte, 1024*65)...))
 			Expect(err).To(BeNil())
 			Expect(fin).To(BeTrue())
 			Expect(rsv1).To(BeFalse())
 			Expect(rsv2).To(BeFalse())
 			Expect(rsv3).To(BeFalse())
 			Expect(opcode).To(Equal(byte(OPCodeBinaryFrame)))
-			Expect(payloadLen).To(Equal(uint64(1024 * 64)))
+			Expect(payloadLen).To(Equal(uint64(1024 * 65)))
 			Expect(maskingKey).To(BeNil())
-			Expect(payload).To(HaveLen(int(1024 * 64)))
+			Expect(payload).To(HaveLen(int(1024 * 65)))
 		})
 
 		It("should parse a package with payload 64 KBytes long with reader", func() {
-			reader := bytes.NewReader(append(singleFrameBinaryUnmasked64KBytesLongHeader, make([]byte, 1024*64)...))
+			packetPayload := make([]byte, 1024*65)
+			for i := 0; i < len(packetPayload); i++ {
+				packetPayload[i] = byte(i % 253)
+			}
+			reader := bytes.NewReader(append(singleFrameBinaryUnmasked64KBytesLongHeader, packetPayload...))
 			buff := make([]byte, 1024*8)
 
 			fin, rsv1, rsv2, rsv3, opcode, payloadLen, maskingKey, payload, err := DecodePacketFromReader(reader, buff)
@@ -314,9 +318,13 @@ var _ = Describe("Protocol", func() {
 			Expect(rsv2).To(BeFalse())
 			Expect(rsv3).To(BeFalse())
 			Expect(opcode).To(Equal(byte(OPCodeBinaryFrame)))
-			Expect(payloadLen).To(Equal(uint64(1024 * 64)))
+			Expect(payloadLen).To(Equal(uint64(1024 * 65)))
 			Expect(maskingKey).To(BeNil())
-			Expect(payload).To(HaveLen(int(1024 * 64)))
+			Expect(payload).To(HaveLen(int(1024 * 65)))
+			Expect(payload[0]).To(Equal(byte(0)))
+			Expect(payload[5]).To(Equal(byte(5)))
+			Expect(payload[100]).To(Equal(byte(100)))
+			Expect(payload[250]).To(Equal(byte(250)))
 		})
 
 		It("should parse a single frame masked and flated", func() {
@@ -488,10 +496,10 @@ var _ = Describe("Protocol", func() {
 		})
 
 		It("should parse a package with payload 64 KBytes long", func() {
-			payload := make([]byte, 1024*64)
+			payload := make([]byte, 1024*65)
 			packet, err := EncodePacket(true, false, false, false, OPCodeBinaryFrame, uint64(len(payload)), nil, payload)
 			Expect(err).To(BeNil())
-			Expect(packet).To(Equal(append(singleFrameBinaryUnmasked64KBytesLongHeader, make([]byte, 1024*64)...)))
+			Expect(packet[:len(singleFrameBinaryUnmasked64KBytesLongHeader)]).To(Equal(singleFrameBinaryUnmasked64KBytesLongHeader))
 		})
 
 		It("should parse a single frame masked and flated", func() {

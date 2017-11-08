@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"time"
+	"log"
 )
 
 // ConnectionState represents the state of the websocket connection.
@@ -169,7 +170,7 @@ func (c *BaseConnection) Read(b []byte) (int, error) {
 
 // ReadPacket implements the websocket.Connection.ReadPacket
 func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
-	_, _, _, _, opcode, _, maskingKey, payload, err := DecodePacketFromReader(c, c.readBuff)
+	_, _, _, _, opcode, _, maskingKey, payload, err := DecodePacketFromReader(c, c.readBuff, time.Now().Add(time.Second*10))
 	if err != nil {
 		return 0, nil, err
 	}
@@ -182,6 +183,7 @@ func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
 		return 0, nil, errorMissingMaskingKey
 	}
 
+	log.Printf("%x", maskingKey)
 	Unmask(payload, maskingKey) // Always masked
 	if c.compressed && (opcode != OPCodeConnectionCloseFrame) {
 		dpayload, err := Deflate(make([]byte, 0, len(payload)), payload)
@@ -223,12 +225,23 @@ func (c *BaseConnection) WritePacket(opcode byte, data []byte) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.Write(packet)
+	packetLen := len(packet)
+	for i := 0; i < packetLen; i += 997 {
+		if i+997 < packetLen {
+			_, err = c.Write(packet[i:i+997])
+		} else {
+			_, err = c.Write(packet[i:packetLen])
+		}
+		if err != nil {
+			return err
+		}
+	}
 	return err
 }
 
 // WritePacketTimeout implements the websocket.Connection.WritePacketTimeout
 func (c *BaseConnection) WritePacketTimeout(timeout time.Duration, opcode byte, data []byte) error {
+	log.Println("Sending pong")
 	if err := c.conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
 		return err
 	}

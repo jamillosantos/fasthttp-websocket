@@ -8,6 +8,8 @@ import (
 	"math"
 	"sync"
 	"io"
+	"log"
+	"time"
 )
 
 const (
@@ -63,7 +65,8 @@ const (
 
 var (
 	ErrUnexpectedEndOfPacket = errors.New("Unexpected end of packet")
-	errorWrongMaskKey        = errors.New("Wrong mask key")
+	ErrTimeout               = errors.New("Timeout")
+	ErrWrongMaskKey          = errors.New("Wrong mask key")
 )
 
 // IsUnexpectedEndOfPacket checks if the given error is of type unexpected end of packet
@@ -122,10 +125,30 @@ func DecodePacket(buff []byte) (fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcod
 	return
 }
 
-func DecodePacketFromReader(reader io.Reader, buff []byte) (fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloadLen uint64, maskingKey []byte, payload []byte, err error) {
+func readBytes(reader io.Reader, buff []byte, deadline time.Time) (int, error) {
+	var n int
+	var i int
+	var err error
+	buffLen := len(buff)
+	for i = 0; i < buffLen; {
+		n, err = reader.Read(buff[i:buffLen])
+		if err == io.EOF {
+			time.Sleep(time.Millisecond)
+			if time.Now().After(deadline) {
+				return i, ErrTimeout
+			}
+		} else if err != nil {
+			return i, ErrUnexpectedEndOfPacket
+		}
+		i += n
+	}
+	return i, nil
+}
+
+func DecodePacketFromReader(reader io.Reader, buff []byte, deadline time.Time) (fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloadLen uint64, maskingKey []byte, payload []byte, err error) {
 	var n int
 	buffLen := uint64(len(buff))
-	n, err = reader.Read(buff[:2])
+	n, err = readBytes(reader, buff[:2], deadline)
 	if (err != nil && err != io.EOF) || (n < 2) {
 		return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
 	}
@@ -143,16 +166,15 @@ func DecodePacketFromReader(reader io.Reader, buff []byte) (fin bool, rsv1 bool,
 	payloadLen = uint64(pl)
 
 	// Check if the payload length is extended
-	startAt := positionMaskPayloadLenExtended
 	if payloadLen == payloadLen16bitsUint64 {
-		n, err = reader.Read(buff[:2])
+		n, err = readBytes(reader, buff[:2], deadline)
 		if (n != 2) || (err != nil) {
 			err = ErrUnexpectedEndOfPacket
 			return
 		}
 		payloadLen = uint64(binary.BigEndian.Uint16(buff[:2]))
 	} else if payloadLen == payloadLen64bitsUint64 {
-		n, err = reader.Read(buff[:8])
+		n, err = readBytes(reader, buff[:8], deadline)
 		if (n != 8) || (err != nil) {
 			err = ErrUnexpectedEndOfPacket
 			return
@@ -162,29 +184,25 @@ func DecodePacketFromReader(reader io.Reader, buff []byte) (fin bool, rsv1 bool,
 
 	// Check the masking key
 	if masked {
-		n, err = reader.Read(buff[:4])
-		if buffLen < uint64(startAt) {
-			return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
+		n, err = readBytes(reader, buff[:4], deadline)
+		if err != nil {
+			return false, false, false, false, 0, 0, nil, nil, err
 		}
 		maskingKey = make([]byte, 4)
 		copy(maskingKey, buff[:4])
 	}
 	if buffLen < payloadLen {
 		payload = make([]byte, payloadLen)
-		n, err = reader.Read(payload)
+		n, err = readBytes(reader, payload, deadline)
 	} else {
-		n, err = reader.Read(buff[:payloadLen])
-		if (err != nil && err != io.EOF) || uint64(n) < payloadLen {
-			return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
-		}
-		if err != nil && err != io.EOF {
-			return false, false, false, false, 0, 0, nil, nil, ErrUnexpectedEndOfPacket
-		}
-		payload = buff[:n]
+		readBytes(reader, buff[:payloadLen], deadline)
+		payload = buff[:payloadLen]
 	}
 	if err != nil && err != io.EOF {
 		return false, false, false, false, 0, 0, nil, nil, err
 	}
+	log.Printf("len(payload) = %d", len(payload))
+	log.Println(payload)
 	err = nil
 	return
 }
@@ -206,10 +224,10 @@ func Unmask(buff, mask []byte) {
 // the RFC 6455
 func EncodePacket(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloadLen uint64, maskingKey []byte, payload []byte) ([]byte, error) {
 	if (maskingKey != nil) && (len(maskingKey) != 4) {
-		return nil, errorWrongMaskKey
+		return nil, ErrWrongMaskKey
 	}
 
-	l := 2 // Default header
+	l := uint64(2) // Default header
 	if payloadLen > math.MaxUint16 {
 		l += 8 // + 64-bit length
 	} else if payloadLen >= uint64(payloadLen16bits) {
@@ -219,7 +237,7 @@ func EncodePacket(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, payloa
 		l += 4 // + masking key
 	}
 
-	dst := make([]byte, l)
+	dst := make([]byte, l, l+payloadLen)
 	if fin {
 		dst[positionFinRsvsOpCode] = dst[positionFinRsvsOpCode] | maskFin
 	}

@@ -21,7 +21,7 @@ func main() {
 		return nil
 	}
 	manager.OnMessage = func(conn websocket.Connection, opcode websocket.MessageType, payload []byte) error {
-		log.Println("OnMessage", opcode, payload)
+		log.Println("OnMessage", opcode, len(payload))
 		conn.WriteMessage(opcode, payload)
 		return nil
 	}

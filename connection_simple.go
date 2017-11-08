@@ -33,6 +33,10 @@ func (c *SimpleConnection) ReadMessage() (MessageType, []byte, error) {
 	c.lastMessageAt = time.Now()
 	if opcode == MessageTypePing {
 		if c.state == ConnectionStateOpen {
+			if len(payload) > 125 {
+				c.CloseWithReason(ConnectionCloseReasonProtocolError)
+				return 0, nil, nil
+			}
 			// Respond the ping message with payload
 			err = c.WritePacketTimeout(time.Millisecond*10, OPCodePongFrame, payload)
 			if err != nil {
@@ -51,9 +55,11 @@ func (c *SimpleConnection) ReadMessage() (MessageType, []byte, error) {
 
 // ReadMessageTimeout implements the websocket.Connection.ReadMessageTimeout method
 func (c *SimpleConnection) ReadMessageTimeout(timeout time.Duration) (MessageType, []byte, error) {
+	/*
+	TODO: Uncomment
 	if err := c.conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 		return 0, nil, err
-	}
+	}*/
 	return c.ReadMessage()
 }
 
