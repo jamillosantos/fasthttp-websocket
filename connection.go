@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"net"
 	"time"
-	"log"
 )
 
 // ConnectionState represents the state of the websocket connection.
@@ -89,8 +88,8 @@ type Connection interface {
 	Read(buffer []byte) (int, error)
 	Write(data []byte) (int, error)
 
-	ReadPacket() (byte, []byte, error)
-	ReadPacketTimeout(timeout time.Duration) (byte, []byte, error)
+	ReadPacket() (bool, byte, []byte, error)
+	ReadPacketTimeout(timeout time.Duration) (bool, byte, []byte, error)
 
 	WritePacket(opcode byte, payload []byte) error
 	WritePacketTimeout(timeout time.Duration, opcode byte, payload []byte) error
@@ -164,41 +163,47 @@ func (c *BaseConnection) Read(b []byte) (int, error) {
 }
 
 // ReadPacket implements the websocket.Connection.ReadPacket
-func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
-	_, rsv1, rsv2, rsv3, opcode, _, maskingKey, payload, err := DecodePacketFromReader(c, c.readBuff, time.Now().Add(time.Second*10))
+func (c *BaseConnection) ReadPacket() (fin bool, opcode byte, payload []byte, err error) {
+	fin, rsv1, rsv2, rsv3, opcode, _, maskingKey, payload, err := DecodePacketFromReader(c, c.readBuff, time.Now().Add(time.Second*10))
 	if err != nil {
-		return 0, nil, err
+		return false, 0, nil, err
 	}
 
 	if rsv1 || rsv2 || rsv3 {
 		c.CloseWithReason(ConnectionCloseReasonProtocolError)
-		return 0, nil, ErrProtocolError
+		c.Terminate()
+		return false, 0, nil, ErrProtocolError
+	}
+
+	if !fin && (MessageType(opcode) == MessageTypePing || MessageType(opcode) == MessageTypePong) {
+		c.CloseWithReason(ConnectionCloseReasonProtocolError)
+		c.Terminate()
+		return false, 0, nil, ErrControlFragmented
 	}
 
 	if maskingKey == nil {
 		err = c.CloseWithReason(ConnectionCloseReasonProtocolError)
 		if err != nil {
-			return 0, nil, err
+			return false, 0, nil, err
 		}
-		return 0, nil, ErrMissingMaskKey
+		return false, 0, nil, ErrMissingMaskKey
 	}
 
-	log.Printf("%x", maskingKey)
 	Unmask(payload, maskingKey) // Always masked
 	if c.compressed && (opcode != OPCodeConnectionCloseFrame) {
 		dpayload, err := Deflate(make([]byte, 0, len(payload)), payload)
 		if err != nil {
-			return 0, nil, err
+			return false, 0, nil, err
 		}
-		return opcode, dpayload, nil
+		return fin, opcode, dpayload, nil
 	}
-	return opcode, payload, nil
+	return fin, opcode, payload, nil
 }
 
 // ReadPacketTimeout implements the websocket.Connection.ReadPacketTimeout
-func (c *BaseConnection) ReadPacketTimeout(timeout time.Duration) (byte, []byte, error) {
+func (c *BaseConnection) ReadPacketTimeout(timeout time.Duration) (bool, byte, []byte, error) {
 	if err := c.conn.SetReadDeadline(time.Now().Add(timeout)); err == nil {
-		return 0, nil, err
+		return false, 0, nil, err
 	}
 	return c.ReadPacket()
 }
@@ -241,7 +246,6 @@ func (c *BaseConnection) WritePacket(opcode byte, data []byte) error {
 
 // WritePacketTimeout implements the websocket.Connection.WritePacketTimeout
 func (c *BaseConnection) WritePacketTimeout(timeout time.Duration, opcode byte, data []byte) error {
-	log.Println("Sending pong")
 	if err := c.conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
 		return err
 	}

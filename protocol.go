@@ -67,6 +67,7 @@ var (
 	ErrConnectionClosing     = errors.New("Connection closing")
 	ErrConnectionClosed      = errors.New("Connection closed")
 	ErrProtocolError         = errors.New("Protocol error")
+	ErrControlFragmented     = errors.New("Control packet fragmented")
 	ErrTimeout               = errors.New("Timeout")
 	ErrMissingMaskKey        = errors.New("Missing mask key")
 	ErrWrongMaskKey          = errors.New("Wrong mask key")
