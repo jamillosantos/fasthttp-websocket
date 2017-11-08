@@ -20,6 +20,13 @@ func NewSimpleConn(conn net.Conn) *SimpleConnection {
 
 // ReadMessage implements the websocket.Connection.ReadMessage method
 func (c *SimpleConnection) ReadMessage() (MessageType, []byte, error) {
+	if c.state == ConnectionStateClosing {
+		return 0, nil, ErrConnectionClosing
+	}
+	if c.state == ConnectionStateClosing {
+		return 0, nil, ErrConnectionClosed
+	}
+
 	opc, payload, err := c.ReadPacket()
 	if err != nil {
 		return 0, nil, err
@@ -31,7 +38,8 @@ func (c *SimpleConnection) ReadMessage() (MessageType, []byte, error) {
 
 	opcode := MessageType(opc)
 	c.lastMessageAt = time.Now()
-	if opcode == MessageTypePing {
+	switch opcode {
+	case MessageTypePing:
 		if c.state == ConnectionStateOpen {
 			if len(payload) > 125 {
 				c.CloseWithReason(ConnectionCloseReasonProtocolError)
@@ -44,15 +52,23 @@ func (c *SimpleConnection) ReadMessage() (MessageType, []byte, error) {
 			}
 		}
 		return 0, nil, nil
-	} else if opcode == MessageTypePong {
+	case MessageTypePong:
 		return 0, nil, nil
-	} else if opcode == MessageTypeConnectionClose {
+	case MessageTypeConnectionClose:
 		c.state = ConnectionStateClosing
 		c.Close()
 		err = c.Terminate()
 		return 0, nil, err
+	case MessageTypeContinuation:
+		return opcode, payload, nil
+	case MessageTypeBinary:
+		return opcode, payload, nil
+	case MessageTypeText:
+		return opcode, payload, nil
+	default:
+		c.CloseWithReason(ConnectionCloseReasonProtocolError)
+		return 0, nil, ErrProtocolError
 	}
-	return opcode, payload, nil
 }
 
 // ReadMessageTimeout implements the websocket.Connection.ReadMessageTimeout method

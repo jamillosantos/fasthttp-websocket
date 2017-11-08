@@ -64,6 +64,8 @@ const (
 
 var (
 	ErrUnexpectedEndOfPacket = errors.New("Unexpected end of packet")
+	ErrConnectionClosing     = errors.New("Connection closing")
+	ErrConnectionClosed      = errors.New("Connection closed")
 	ErrProtocolError         = errors.New("Protocol error")
 	ErrTimeout               = errors.New("Timeout")
 	ErrMissingMaskKey        = errors.New("Missing mask key")
