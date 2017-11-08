@@ -2,7 +2,6 @@ package websocket
 
 import (
 	"encoding/binary"
-	"errors"
 	"net"
 	"time"
 	"log"
@@ -73,10 +72,6 @@ const (
 	MessageTypePing MessageType = 9
 	// MessageTypePong represents a pong frame
 	MessageTypePong MessageType = 10
-)
-
-var (
-	errorMissingMaskingKey = errors.New("protocol error: missing masking key")
 )
 
 // Connection is the minimum representation of a websocket connection
@@ -170,9 +165,14 @@ func (c *BaseConnection) Read(b []byte) (int, error) {
 
 // ReadPacket implements the websocket.Connection.ReadPacket
 func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
-	_, _, _, _, opcode, _, maskingKey, payload, err := DecodePacketFromReader(c, c.readBuff, time.Now().Add(time.Second*10))
+	_, rsv1, rsv2, rsv3, opcode, _, maskingKey, payload, err := DecodePacketFromReader(c, c.readBuff, time.Now().Add(time.Second*10))
 	if err != nil {
 		return 0, nil, err
+	}
+
+	if rsv1 || rsv2 || rsv3 {
+		c.CloseWithReason(ConnectionCloseReasonProtocolError)
+		return 0, nil, ErrProtocolError
 	}
 
 	if maskingKey == nil {
@@ -180,7 +180,7 @@ func (c *BaseConnection) ReadPacket() (byte, []byte, error) {
 		if err != nil {
 			return 0, nil, err
 		}
-		return 0, nil, errorMissingMaskingKey
+		return 0, nil, ErrMissingMaskKey
 	}
 
 	log.Printf("%x", maskingKey)

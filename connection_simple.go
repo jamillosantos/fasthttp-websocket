@@ -44,6 +44,8 @@ func (c *SimpleConnection) ReadMessage() (MessageType, []byte, error) {
 			}
 		}
 		return 0, nil, nil
+	} else if opcode == MessageTypePong {
+		return 0, nil, nil
 	} else if opcode == MessageTypeConnectionClose {
 		c.state = ConnectionStateClosing
 		c.Close()

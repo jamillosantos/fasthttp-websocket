@@ -8,7 +8,6 @@ import (
 	"math"
 	"sync"
 	"io"
-	"log"
 	"time"
 )
 
@@ -65,7 +64,9 @@ const (
 
 var (
 	ErrUnexpectedEndOfPacket = errors.New("Unexpected end of packet")
+	ErrProtocolError         = errors.New("Protocol error")
 	ErrTimeout               = errors.New("Timeout")
+	ErrMissingMaskKey        = errors.New("Missing mask key")
 	ErrWrongMaskKey          = errors.New("Wrong mask key")
 )
 
@@ -155,9 +156,9 @@ func DecodePacketFromReader(reader io.Reader, buff []byte, deadline time.Time) (
 
 	// 1st byte
 	fin = (buff[positionFinRsvsOpCode] & maskFin) == maskFin
-	rsv1 = (buff[positionFinRsvsOpCode] & maskRsv1) == maskFin
-	rsv2 = (buff[positionFinRsvsOpCode] & maskRsv2) == maskFin
-	rsv3 = (buff[positionFinRsvsOpCode] & maskRsv3) == maskFin
+	rsv1 = (buff[positionFinRsvsOpCode] & maskRsv1) == maskRsv1
+	rsv2 = (buff[positionFinRsvsOpCode] & maskRsv2) == maskRsv2
+	rsv3 = (buff[positionFinRsvsOpCode] & maskRsv3) == maskRsv3
 	opcode = buff[positionFinRsvsOpCode] & maskOpCode
 
 	// 2nd byte
@@ -201,8 +202,6 @@ func DecodePacketFromReader(reader io.Reader, buff []byte, deadline time.Time) (
 	if err != nil && err != io.EOF {
 		return false, false, false, false, 0, 0, nil, nil, err
 	}
-	log.Printf("len(payload) = %d", len(payload))
-	log.Println(payload)
 	err = nil
 	return
 }
